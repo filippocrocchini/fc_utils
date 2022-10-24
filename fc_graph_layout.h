@@ -29,26 +29,26 @@ struct fc_node
 
 struct fc_edge
 {
-    size_t first;
-    size_t second;
+    int first;
+    int second;
 };
 
 struct fc_graph
 {
     fc_node* nodes;
-    size_t node_count;
+    int node_count;
 
     fc_edge* edges;
-    size_t edge_count;
+    int edge_count;
 };
 
 struct fc_layout_info
 {
     float min_energy = 1.f;
-    
+
     float repulsive_force_scale = 0.6f;
     float optimal_distance      = 2000;
-    
+
     float step = 100;
     float t    = 0.9f;
 };
@@ -111,6 +111,10 @@ static fc_v2f repulsive_force(fc_node* a, fc_node* b, float repulsive_force_scal
 {
     fc_v2f diff = fc_v2f_subtract(b->position, a->position);
     float dist = fc_v2f_length(diff);
+    
+    if(dist < FLT_EPSILON)
+        return fc_v2f{};
+
     return fc_v2f_multiply(diff, -repulsive_force_scale * optimal_distance / (dist*dist*dist));
 }
 
@@ -133,14 +137,14 @@ void layout_graph(fc_graph graph, fc_layout_info layout_info)
 {
     float step       = layout_info.step;
     float min_energy = layout_info.min_energy;
-    
+
     float t = layout_info.t;
     float repulsive_force_scale = layout_info.repulsive_force_scale;
     float optimal_distance = layout_info.optimal_distance;
 
     float energy = 0;
     int progress = 0;
-    
+
     while(true)
     {
         float last_energy = energy;
@@ -164,7 +168,7 @@ void layout_graph(fc_graph graph, fc_layout_info layout_info)
                     other = edge.first;
                 }
 
-                if(other > 0)
+                if(other >= 0)
                 {
                     force = fc_v2f_add(force, attractive_force(node, graph.nodes + other, optimal_distance));
                 }
@@ -173,9 +177,9 @@ void layout_graph(fc_graph graph, fc_layout_info layout_info)
             for(int j = 0; j < graph.node_count; j++)
             {
                 auto other_node = graph.nodes + j;
-    
+
                 if(i == j) continue;
-                
+
                 force = fc_v2f_add(force, repulsive_force(node, other_node, repulsive_force_scale, optimal_distance));
             }
 
