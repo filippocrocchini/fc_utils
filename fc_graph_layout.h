@@ -14,6 +14,8 @@ Usage:
     // Just include as usual in the others
     #include "fc_graph_layout.h"
 
+    This library partially implements Yifan Hu's graph layout algorithm described in
+    "Efficient, High-Quality Force-Directed Graph Drawing", Yifan Hu, 2006
 */
 
 #ifndef FC_GRAPH_LAYOUT
@@ -47,16 +49,16 @@ struct fc_graph
 
 struct fc_layout_info
 {
-    float min_energy = 1.f;
+    float repulsive_force_scale = 0.6f; 
+    float optimal_distance      = 16.f;
 
-    float repulsive_force_scale = 0.6f;
-    float optimal_distance      = 2000;
+    float initial_step_length = 100; // The algorithm uses an adaptive step size, so this is just the starting value.
 
-    float step = 100;
-    float t    = 0.9f;
+    int iteration_cap  = INFINITY;
+    float min_movement = 1; // This is the smalles movement after which we will consider the current configuration to be good enough.
 };
 
-void layout_graph(fc_graph graph, fc_layout_info layout_info);
+void fc_layout_graph(fc_graph graph, fc_layout_info layout_info);
 
 #ifdef FC_GRAPH_LAYOUT_IMPLEMENTATION
 
@@ -104,13 +106,13 @@ static fc_v2f fc_v2f_normalize(fc_v2f a)
     return fc_v2f_multiply(a, 1.f / len);
 }
 
-static fc_v2f attractive_force(fc_node* a, fc_node* b, float optimal_distance)
+static fc_v2f fc_attractive_force(fc_node* a, fc_node* b, float optimal_distance)
 {
     fc_v2f diff = fc_v2f_subtract(b->position, a->position);
     return fc_v2f_multiply(diff, fc_v2f_length(diff) / optimal_distance);
 }
 
-static fc_v2f repulsive_force(fc_node* a, fc_node* b, float repulsive_force_scale, float optimal_distance)
+static fc_v2f fc_repulsive_force(fc_node* a, fc_node* b, float repulsive_force_scale, float optimal_distance)
 {
     fc_v2f diff = fc_v2f_subtract(b->position, a->position);
     float dist = fc_v2f_length(diff);
@@ -121,7 +123,7 @@ static fc_v2f repulsive_force(fc_node* a, fc_node* b, float repulsive_force_scal
     return fc_v2f_multiply(diff, -repulsive_force_scale * optimal_distance / (dist*dist*dist));
 }
 
-static float compute_adaptive_step(int* progress, float t, float step, float last_energy, float energy)
+static float fc_compute_adaptive_step(int* progress, float t, float step, float last_energy, float energy)
 {
     if(energy < last_energy){
         *progress += 1;
@@ -136,22 +138,29 @@ static float compute_adaptive_step(int* progress, float t, float step, float las
     return step;
 }
 
-void layout_graph(fc_graph graph, fc_layout_info layout_info)
+void fc_layout_graph(fc_graph graph, fc_layout_info layout_info)
 {
-    float step       = layout_info.step;
-    float min_energy = layout_info.min_energy;
+    float step = layout_info.initial_step_length;
 
-    float t = layout_info.t;
+    float t = 0.9f; // This value is what Yifan Hu suggests.
+
+    float optimal_distance = (layout_info.optimal_distance * layout_info.optimal_distance * layout_info.optimal_distance * layout_info.optimal_distance) / layout_info.repulsive_force_scale;
     float repulsive_force_scale = layout_info.repulsive_force_scale;
-    float optimal_distance = layout_info.optimal_distance;
 
-    float energy = 0;
+    float energy = INFINITY;
     int progress = 0;
 
-    while(true)
+    float biggest_movement_in_iteration = 0;
+
+    int iteration = 0;
+    while(iteration < layout_info.iteration_cap)
     {
         float last_energy = energy;
+        
+        iteration += 1;
+
         energy = 0;
+        biggest_movement_in_iteration = 0;
 
         for(int i = 0; i < graph.node_count; i++)
         {
@@ -165,7 +174,8 @@ void layout_graph(fc_graph graph, fc_layout_info layout_info)
                 if(edge.first == edge.second) continue;
 
                 int other = -1;
-                if(edge.first == i){
+                if(edge.first == i)
+                {
                     other = edge.second;
                 } else if(edge.second == i){
                     other = edge.first;
@@ -173,7 +183,7 @@ void layout_graph(fc_graph graph, fc_layout_info layout_info)
 
                 if(other >= 0)
                 {
-                    force = fc_v2f_add(force, attractive_force(node, graph.nodes + other, optimal_distance));
+                    force = fc_v2f_add(force, fc_attractive_force(node, graph.nodes + other, optimal_distance));
                 }
             }
 
@@ -183,17 +193,23 @@ void layout_graph(fc_graph graph, fc_layout_info layout_info)
 
                 if(i == j) continue;
 
-                force = fc_v2f_add(force, repulsive_force(node, other_node, repulsive_force_scale, optimal_distance));
+                force = fc_v2f_add(force, fc_repulsive_force(node, other_node, repulsive_force_scale, optimal_distance));
             }
 
             fc_v2f dp = fc_v2f_multiply(fc_v2f_normalize(force), step);
             node->position = fc_v2f_add(node->position, dp);
             energy += fc_v2f_length_sq(force);
+
+            float dp_length = fc_v2f_length(dp);
+            if (biggest_movement_in_iteration < dp_length)
+            {
+                biggest_movement_in_iteration = dp_length;
+            }
         }
 
-        step = compute_adaptive_step(&progress, t, step, last_energy, energy);
+        step = fc_compute_adaptive_step(&progress, t, step, last_energy, energy);
 
-        if(energy < min_energy) break;
+        if(biggest_movement_in_iteration < layout_info.min_movement) break;
     }
 }
 
