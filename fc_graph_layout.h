@@ -1,9 +1,9 @@
 /*
 Author:
-	- Filippo Crocchini
+    - Filippo Crocchini
 
 Copyright:
-	This library is available under the MIT license, see end of the file.
+    This library is available under the MIT license, see end of the file.
 
 Usage:
     // Do this in only one file
@@ -36,6 +36,8 @@ struct fc_edge
 {
     int first;
     int second;
+
+    float weight = 1.f;
 };
 
 struct fc_graph
@@ -54,7 +56,7 @@ struct fc_layout_info
 
     float initial_step_length = 100; // The algorithm uses an adaptive step size, so this is just the starting value.
 
-    int iteration_cap  = INFINITY;
+    int iteration_cap  = INT_MAX;
     float min_movement = 1; // This is the smalles movement after which we will consider the current configuration to be good enough.
 };
 
@@ -106,21 +108,21 @@ static fc_v2f fc_v2f_normalize(fc_v2f a)
     return fc_v2f_multiply(a, 1.f / len);
 }
 
-static fc_v2f fc_attractive_force(fc_node* a, fc_node* b, float optimal_distance)
+static fc_v2f fc_attractive_force(fc_node* a, fc_node* b, float scale, float optimal_distance)
 {
     fc_v2f diff = fc_v2f_subtract(b->position, a->position);
-    return fc_v2f_multiply(diff, fc_v2f_length(diff) / optimal_distance);
+    return fc_v2f_multiply(diff, scale * fc_v2f_length(diff) / optimal_distance);
 }
 
-static fc_v2f fc_repulsive_force(fc_node* a, fc_node* b, float repulsive_force_scale, float optimal_distance)
+static fc_v2f fc_repulsive_force(fc_node* a, fc_node* b, float scale, float optimal_distance)
 {
     fc_v2f diff = fc_v2f_subtract(b->position, a->position);
     float dist = fc_v2f_length(diff);
-    
+
     if(dist < FLT_EPSILON)
         return fc_v2f{};
 
-    return fc_v2f_multiply(diff, -repulsive_force_scale * optimal_distance / (dist*dist*dist));
+    return fc_v2f_multiply(diff, - scale * optimal_distance / (dist*dist*dist));
 }
 
 static float fc_compute_adaptive_step(int* progress, float t, float step, float last_energy, float energy)
@@ -156,7 +158,7 @@ void fc_layout_graph(fc_graph graph, fc_layout_info layout_info)
     while(iteration < layout_info.iteration_cap)
     {
         float last_energy = energy;
-        
+
         iteration += 1;
 
         energy = 0;
@@ -183,7 +185,7 @@ void fc_layout_graph(fc_graph graph, fc_layout_info layout_info)
 
                 if(other >= 0)
                 {
-                    force = fc_v2f_add(force, fc_attractive_force(node, graph.nodes + other, optimal_distance));
+                    force = fc_v2f_add(force, fc_attractive_force(node, graph.nodes + other, edge.weight, optimal_distance));
                 }
             }
 
@@ -218,23 +220,23 @@ void fc_layout_graph(fc_graph graph, fc_layout_info layout_info)
 #endif // FC_GRAPH_LAYOUT
 
 /*
-	Copyright (c) 2022 Filippo Crocchini
+    Copyright (c) 2022 Filippo Crocchini
 
-	Permission is hereby granted, free of charge, to any person obtaining a copy
-	of this software and associated documentation files (the "Software"), to deal
-	in the Software without restriction, including without limitation the rights
-	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-	copies of the Software, and to permit persons to whom the Software is
-	furnished to do so, subject to the following conditions:
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
 
-	The above copyright notice and this permission notice shall be included in all
-	copies or substantial portions of the Software.
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
 
-	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-	SOFTWARE.
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
 */
