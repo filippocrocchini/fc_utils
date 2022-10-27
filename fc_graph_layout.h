@@ -21,43 +21,55 @@ Usage:
 #ifndef FC_GRAPH_LAYOUT
 #define FC_GRAPH_LAYOUT
 
-struct fc_v2f
+typedef struct
 {
     float x;
     float y;
-};
+} fc_v2f;
 
-struct fc_node
+typedef struct
 {
     fc_v2f position;
-};
+} fc_node;
 
-struct fc_edge
+typedef struct
 {
     int first;
     int second;
 
     float weight = 1.f;
+} fc_edge;
+
+const fc_edge fc_edge_default = {
+    .weight = 1.f;
 };
 
-struct fc_graph
+typedef struct
 {
     fc_node* nodes;
     int node_count;
 
     fc_edge* edges;
     int edge_count;
-};
+} fc_graph;
 
-struct fc_layout_info
+typedef struct
 {
-    float repulsive_force_scale = 0.6f; 
-    float optimal_distance      = 16.f;
+    float repulsive_force_scale; 
+    float optimal_distance;
+    
+    float initial_step_length; // The algorithm uses an adaptive step size, so this is just the starting value.
+    
+    int iteration_cap;
+    float min_movement; // This is the smalles movement after which we will consider the current configuration to be good enough.
+} fc_layout_info;
 
-    float initial_step_length = 100; // The algorithm uses an adaptive step size, so this is just the starting value.
-
-    int iteration_cap  = INT_MAX;
-    float min_movement = 1; // This is the smalles movement after which we will consider the current configuration to be good enough.
+const fc_layout_info fc_layout_info_default = {
+    .repulsive_force_scale = 0.6f; 
+    .optimal_distance      = 16.f;
+    .initial_step_length   = 100; 
+    .iteration_cap         = INT_MAX;
+    .min_movement          = 1;
 };
 
 void fc_layout_graph(fc_graph graph, fc_layout_info layout_info);
