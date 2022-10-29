@@ -13,6 +13,13 @@
     // Just include as usual in the others
     #include "fc_uri_parse.h"
 
+Example:
+    fc_uri repository_uri;
+    fc_uri_parse("https://github.com/filippocrocchini/fc_utils", &repository_uri);
+
+    // use repository_uri
+
+Info:
     Parser for URIs according to RFC3986 (https://www.rfc-editor.org/rfc/rfc3986)
     It does NOT implement relative URIs
 */
