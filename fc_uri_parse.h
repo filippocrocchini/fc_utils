@@ -50,7 +50,7 @@ typedef struct
 
     bool ipv6_host;
 
-    char buf[FC_URI_MAX + 8]; // Eight '\0' to null-terminate all possible fields. Some characters are ignored so, this is probably too many.
+    char buf[FC_URI_MAX + 8]; // Eight '\0' to null-terminate all possible fields. Some characters are ignored so, these are probably too many.
 } fc_uri;
 
 void fc_uri_parse(const char* src, fc_uri* uri);
@@ -61,7 +61,7 @@ typedef struct
 {
     char* data;
     int  count;
-} fc_str;
+} fc_urip_str;
 
 typedef struct
 {
@@ -69,9 +69,9 @@ typedef struct
     char* in_buffer_end;
 
     char* cursor;
-} fc_parser_state;
+} fc_urip_lexer_state;
 
-bool fc_accept_char(fc_parser_state* state, char c)
+static bool fc_urip_accept_char(fc_urip_lexer_state* state, char c)
 {
     if (state->cursor != state->in_buffer_end && *state->cursor == c)
     {
@@ -81,7 +81,7 @@ bool fc_accept_char(fc_parser_state* state, char c)
     return false;
 }
 
-bool fc_accept_str(fc_parser_state* state, const char* str)
+static bool fc_urip_accept_str(fc_urip_lexer_state* state, const char* str)
 {
     char* c = state->cursor;
     while (c != state->in_buffer_end && *str && *c++ == *str++);
@@ -95,9 +95,9 @@ bool fc_accept_str(fc_parser_state* state, const char* str)
     return false;
 }
 
-fc_str fc_read_until(fc_parser_state* state, const char* stop_at)
+static fc_urip_str fc_urip_read_until(fc_urip_lexer_state* state, const char* stop_at)
 {
-    fc_str result = {0};
+    fc_urip_str result = {0};
 
     result.data  = state->cursor;
 
@@ -123,7 +123,7 @@ fc_str fc_read_until(fc_parser_state* state, const char* stop_at)
     return result;
 }
 
-char* fc_copy_string(const char* str, int count, char* target_buffer, int* buffer_offest)
+static char* fc_urip_copy_string(const char* str, int count, char* target_buffer, int* buffer_offest)
 {
     if (!count) return NULL;
 
@@ -139,7 +139,7 @@ char* fc_copy_string(const char* str, int count, char* target_buffer, int* buffe
     return result;
 }
 
-void fc_init_parser_state(fc_parser_state* state, const char* input, int input_size = -1)
+static void fc_urip_init_parser_state(fc_urip_lexer_state* state, const char* input, int input_size = -1)
 {
     state->in_buffer = (char*)input;
     state->in_buffer_end = input_size > 0 ? (char*)input + input_size : NULL;
@@ -148,64 +148,64 @@ void fc_init_parser_state(fc_parser_state* state, const char* input, int input_s
 
 void fc_uri_parse(const char* src, fc_uri* uri)
 {
-    fc_parser_state parser = {};
+    fc_urip_lexer_state parser = {};
 
-    fc_init_parser_state(&parser, src);
+    fc_urip_init_parser_state(&parser, src);
 
     uri->ipv6_host = false;
 
-    fc_str scheme = fc_read_until(&parser, ":");
+    fc_urip_str scheme = fc_urip_read_until(&parser, ":");
 
-    fc_str authority = {};
-    fc_str user = {};
-    fc_str access_info = {};
-    fc_str host = {};
-    fc_str port = {};
+    fc_urip_str authority = {};
+    fc_urip_str user = {};
+    fc_urip_str access_info = {};
+    fc_urip_str host = {};
+    fc_urip_str port = {};
 
-    fc_str path = {};
-    fc_str query = {};
-    fc_str fragment = {};
+    fc_urip_str path = {};
+    fc_urip_str query = {};
+    fc_urip_str fragment = {};
 
-    if (!fc_accept_char(&parser, ':'))
+    if (!fc_urip_accept_char(&parser, ':'))
     {
         // No scheme, likely a relative resource. Which we don't support. (yet?)
         return;
     }
 
-    if (fc_accept_str(&parser, "//"))
+    if (fc_urip_accept_str(&parser, "//"))
     {
-        authority = fc_read_until(&parser, "/");
+        authority = fc_urip_read_until(&parser, "/");
 
-        fc_parser_state authority_parser = {};
-        fc_init_parser_state(&authority_parser, authority.data, authority.count);
+        fc_urip_lexer_state authority_parser = {};
+        fc_urip_init_parser_state(&authority_parser, authority.data, authority.count);
 
-        if (fc_accept_char(&authority_parser, '['))
+        if (fc_urip_accept_char(&authority_parser, '['))
         {
             uri->ipv6_host = true;
             // [host]:port/
-            host = fc_read_until(&authority_parser, "]");
-            if (!fc_accept_char(&authority_parser, ']'))
+            host = fc_urip_read_until(&authority_parser, "]");
+            if (!fc_urip_accept_char(&authority_parser, ']'))
             {
                 // Missing closed bracket
                 return;
             }
 
-            if (fc_accept_char(&authority_parser, ':'))
+            if (fc_urip_accept_char(&authority_parser, ':'))
             {
-                port = fc_read_until(&authority_parser, "/");
+                port = fc_urip_read_until(&authority_parser, "/");
             }
         }
         else {
             // host:port/
             // user:pwd@[host]:port/
 
-            fc_str host_ot_user = fc_read_until(&authority_parser, ":/");
+            fc_urip_str host_ot_user = fc_urip_read_until(&authority_parser, ":/");
             
-            fc_accept_char(&authority_parser, ':');
+            fc_urip_accept_char(&authority_parser, ':');
             
-            fc_str access_info_or_port = fc_read_until(&authority_parser, "@/");
+            fc_urip_str access_info_or_port = fc_urip_read_until(&authority_parser, "@/");
 
-            if (fc_accept_char(&authority_parser, '@'))
+            if (fc_urip_accept_char(&authority_parser, '@'))
             {
                 user = host_ot_user;
                 access_info = access_info_or_port;
@@ -213,24 +213,24 @@ void fc_uri_parse(const char* src, fc_uri* uri)
                 // @[host]:port
                 // @host:port
 
-                if (fc_accept_char(&authority_parser, '['))
+                if (fc_urip_accept_char(&authority_parser, '['))
                 {
                     uri->ipv6_host = true;
 
-                    host = fc_read_until(&authority_parser, "]");
-                    if (!fc_accept_char(&authority_parser, ']'))
+                    host = fc_urip_read_until(&authority_parser, "]");
+                    if (!fc_urip_accept_char(&authority_parser, ']'))
                     {
                         // Missing closed bracket
                         return;
                     }
                 }
                 else {
-                    host = fc_read_until(&authority_parser, ":/");
+                    host = fc_urip_read_until(&authority_parser, ":/");
                 }
 
-                if (fc_accept_char(&authority_parser, ':'))
+                if (fc_urip_accept_char(&authority_parser, ':'))
                 {
-                    port = fc_read_until(&authority_parser, "/");
+                    port = fc_urip_read_until(&authority_parser, "/");
                 }
             }
             else {
@@ -241,28 +241,28 @@ void fc_uri_parse(const char* src, fc_uri* uri)
 
     }
 
-    path = fc_read_until(&parser, "?");
+    path = fc_urip_read_until(&parser, "?");
 
-    if (fc_accept_char(&parser, '?'))
+    if (fc_urip_accept_char(&parser, '?'))
     {
-        query = fc_read_until(&parser, "#");
+        query = fc_urip_read_until(&parser, "#");
     }
 
-    if (fc_accept_char(&parser, '#'))
+    if (fc_urip_accept_char(&parser, '#'))
     {
-        fragment = fc_read_until(&parser, "");
+        fragment = fc_urip_read_until(&parser, "");
     }
 
     int offset = 0;
 
-    uri->scheme   = fc_copy_string(scheme.data,    scheme.count,    uri->buf, &offset);
-    uri->user     = fc_copy_string(user.data,      user.count,      uri->buf, &offset);
-    uri->access_info = fc_copy_string(access_info.data, access_info.count, uri->buf, &offset);
-    uri->host     = fc_copy_string(host.data,      host.count,      uri->buf, &offset);
-    uri->port     = fc_copy_string(port.data,      port.count,      uri->buf, &offset);
-    uri->path     = fc_copy_string(path.data,      path.count,      uri->buf, &offset);
-    uri->query    = fc_copy_string(query.data,     query.count,     uri->buf, &offset);
-    uri->fragment = fc_copy_string(fragment.data,  fragment.count,  uri->buf, &offset);
+    uri->scheme   = fc_urip_copy_string(scheme.data,    scheme.count,    uri->buf, &offset);
+    uri->user     = fc_urip_copy_string(user.data,      user.count,      uri->buf, &offset);
+    uri->access_info = fc_urip_copy_string(access_info.data, access_info.count, uri->buf, &offset);
+    uri->host     = fc_urip_copy_string(host.data,      host.count,      uri->buf, &offset);
+    uri->port     = fc_urip_copy_string(port.data,      port.count,      uri->buf, &offset);
+    uri->path     = fc_urip_copy_string(path.data,      path.count,      uri->buf, &offset);
+    uri->query    = fc_urip_copy_string(query.data,     query.count,     uri->buf, &offset);
+    uri->fragment = fc_urip_copy_string(fragment.data,  fragment.count,  uri->buf, &offset);
 }
 
 #endif // FC_URI_PARSE_IMPLEMENTATION
