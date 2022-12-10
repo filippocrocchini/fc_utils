@@ -71,8 +71,11 @@ typedef struct
 
     int iteration_cap;
     float min_movement; // This is the smalles movement after which we will consider the current configuration to be good enough.
-} fc_layout_info;
 
+    float central_force_scale;
+
+    float step_multiplier;
+} fc_layout_info;
 
 #ifndef __cplusplus
 const fc_layout_info fc_layout_info_default = {
@@ -81,6 +84,8 @@ const fc_layout_info fc_layout_info_default = {
     .initial_step_length   = 100,
     .iteration_cap         = INT_MAX,
     .min_movement          = 1,
+    .central_force_scale   = 0.f,
+    .step_multiplier       = 0.9f,
 };
 #else 
 constexpr fc_layout_info fc_layout_info_default = {
@@ -89,8 +94,21 @@ constexpr fc_layout_info fc_layout_info_default = {
     100, // initial_step_length
     INT_MAX, // iteration_cap
     1, // min_movement
+    0.f,
+    0.9f
 };
 #endif
+
+typedef struct
+{
+    float      step;
+    float    energy;
+    int    progress;
+    float biggest_movement_in_iteration;
+} fc_dynamic_layout_state;
+
+void fc_begin_dynamic_layout(fc_dynamic_layout_state* state);
+void fc_compute_dynamic_step(fc_dynamic_layout_state* state, fc_graph graph, fc_layout_info layout_info);
 
 void fc_layout_graph(fc_graph graph, fc_layout_info layout_info);
 
@@ -140,15 +158,15 @@ static fc_v2f fc_v2f_normalize(fc_v2f a)
     return fc_v2f_multiply(a, 1.f / len);
 }
 
-static fc_v2f fc_attractive_force(fc_node* a, fc_node* b, float scale, float optimal_distance)
+static fc_v2f fc_attractive_force(fc_v2f p1, fc_v2f p2, float scale, float optimal_distance)
 {
-    fc_v2f diff = fc_v2f_subtract(b->position, a->position);
+    fc_v2f diff = fc_v2f_subtract(p2, p1);
     return fc_v2f_multiply(diff, scale * fc_v2f_length(diff) / optimal_distance);
 }
 
-static fc_v2f fc_repulsive_force(fc_node* a, fc_node* b, float scale, float optimal_distance)
+static fc_v2f fc_repulsive_force(fc_v2f p1, fc_v2f p2, float scale, float optimal_distance)
 {
-    fc_v2f diff = fc_v2f_subtract(b->position, a->position);
+    fc_v2f diff = fc_v2f_subtract(p2, p1);
     float dist = fc_v2f_length(diff);
 
     if(dist < FLT_EPSILON)
@@ -167,83 +185,92 @@ static float fc_compute_adaptive_step(int* progress, float t, float step, float 
         }
     } else {
         *progress = 0;
-        return t * step;
+        return step * t;
     }
     return step;
 }
 
-void fc_layout_graph(fc_graph graph, fc_layout_info layout_info)
+void fc_begin_dynamic_layout(fc_dynamic_layout_state* state, fc_layout_info layout_info)
 {
-    float step = layout_info.initial_step_length;
+    state->step      = layout_info.initial_step_length;
+    state->energy    = INFINITY;
+    state->progress  = 0;
+}
 
-    float t = 0.9f; // This value is what Yifan Hu suggests.
-
-    float optimal_distance = (layout_info.optimal_distance * layout_info.optimal_distance * layout_info.optimal_distance * layout_info.optimal_distance) / layout_info.repulsive_force_scale;
+void fc_compute_dynamic_step(fc_dynamic_layout_state* state, fc_graph graph, fc_layout_info layout_info)
+{
+    float optimal_distance      = (layout_info.optimal_distance * layout_info.optimal_distance * layout_info.optimal_distance * layout_info.optimal_distance) / layout_info.repulsive_force_scale;
     float repulsive_force_scale = layout_info.repulsive_force_scale;
+    float last_energy           = state->energy;
 
-    float energy = INFINITY;
-    int progress = 0;
+    state->energy = 0;
+    state->biggest_movement_in_iteration = 0;
 
-    float biggest_movement_in_iteration = 0;
-
-    int iteration = 0;
-    while(iteration < layout_info.iteration_cap)
+    for (int i = 0; i < graph.node_count; i++)
     {
-        float last_energy = energy;
+        auto node = graph.nodes + i;
 
-        iteration += 1;
-
-        energy = 0;
-        biggest_movement_in_iteration = 0;
-
-        for(int i = 0; i < graph.node_count; i++)
+        fc_v2f force = {};
+        for (int j = 0; j < graph.edge_count; j++)
         {
-            auto node = graph.nodes + i;
+            auto edge = graph.edges[j];
 
-            fc_v2f force = {};
-            for(int j = 0; j < graph.edge_count; j++)
+            if (edge.first == edge.second) continue;
+
+            int other = -1;
+            if (edge.first == i)
             {
-                auto edge = graph.edges[j];
-
-                if(edge.first == edge.second) continue;
-
-                int other = -1;
-                if(edge.first == i)
-                {
-                    other = edge.second;
-                } else if(edge.second == i){
-                    other = edge.first;
-                }
-
-                if(other >= 0)
-                {
-                    force = fc_v2f_add(force, fc_attractive_force(node, graph.nodes + other, edge.weight, optimal_distance));
-                }
+                other = edge.second;
+            }
+            else if (edge.second == i) {
+                other = edge.first;
             }
 
-            for(int j = 0; j < graph.node_count; j++)
+            if (other >= 0)
             {
-                auto other_node = graph.nodes + j;
-
-                if(i == j) continue;
-
-                force = fc_v2f_add(force, fc_repulsive_force(node, other_node, repulsive_force_scale, optimal_distance));
-            }
-
-            fc_v2f dp = fc_v2f_multiply(fc_v2f_normalize(force), step);
-            node->position = fc_v2f_add(node->position, dp);
-            energy += fc_v2f_length_sq(force);
-
-            float dp_length = fc_v2f_length(dp);
-            if (biggest_movement_in_iteration < dp_length)
-            {
-                biggest_movement_in_iteration = dp_length;
+                force = fc_v2f_add(force, fc_attractive_force(node->position, (graph.nodes + other)->position, edge.weight, optimal_distance));
             }
         }
 
-        step = fc_compute_adaptive_step(&progress, t, step, last_energy, energy);
+        for (int j = 0; j < graph.node_count; j++)
+        {
+            auto other_node = graph.nodes + j;
 
-        if(biggest_movement_in_iteration < layout_info.min_movement) break;
+            if (i == j) continue;
+
+            force = fc_v2f_add(force, fc_repulsive_force(node->position, other_node->position, repulsive_force_scale, optimal_distance));
+        }
+
+        force = fc_v2f_add(force, fc_attractive_force(node->position, fc_v2f{0, 0}, layout_info.central_force_scale, optimal_distance));
+
+        fc_v2f dp = fc_v2f_multiply(fc_v2f_normalize(force), state->step);
+        node->position = fc_v2f_add(node->position, dp);
+        state->energy += fc_v2f_length_sq(force);
+
+        float dp_length = fc_v2f_length(dp);
+        if (state->biggest_movement_in_iteration < dp_length)
+        {
+            state->biggest_movement_in_iteration = dp_length;
+        }
+    }
+
+    state->step = fc_compute_adaptive_step(&state->progress, layout_info.step_multiplier, state->step, last_energy, state->energy);
+}
+
+void fc_layout_graph(fc_graph graph, fc_layout_info layout_info)
+{
+    fc_dynamic_layout_state state = {};
+
+    fc_begin_dynamic_layout(&state, layout_info);
+
+    int iteration = 0;
+
+    while (iteration < layout_info.iteration_cap)
+    {
+        iteration += 1;
+        fc_compute_dynamic_step(&state, graph, layout_info);
+
+        if (state.biggest_movement_in_iteration < layout_info.min_movement) break;
     }
 }
 
