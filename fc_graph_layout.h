@@ -279,7 +279,7 @@ void fc_layout_graph(fc_graph graph, fc_layout_info layout_info)
 #endif // FC_GRAPH_LAYOUT
 
 /*
-    Copyright (c) 2022 Filippo Crocchini
+    Copyright (c) 2023 Filippo Crocchini
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to deal
