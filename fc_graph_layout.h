@@ -7,12 +7,21 @@ Copyright:
 
 Usage:
     // Do this in only one file
-
-    #define FC_GRAPH_LAYOUT_IMPLEMENTATION
-    #include "fc_graph_layout.h"
-
-    // Just include as usual in the others
-    #include "fc_graph_layout.h"
+    "
+        #define FC_GRAPH_LAYOUT_IMPLEMENTATION
+        #include "fc_graph_layout.h"
+    
+        // Just include as usual in the others
+        #include "fc_graph_layout.h"
+    "
+    
+    You may also do the following:
+    "
+        #include "fc_graph_layout.h"
+    
+        #define FC_GRAPH_LAYOUT_IMPLEMENTATION
+        #include "fc_graph_layout.h"
+    "
 
     This library partially implements Yifan Hu's graph layout algorithm described in
     "Efficient, High-Quality Force-Directed Graph Drawing", Yifan Hu, 2006
