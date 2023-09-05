@@ -21,6 +21,9 @@ Usage:
 #ifndef FC_GRAPH_LAYOUT
 #define FC_GRAPH_LAYOUT
 
+#include <stdint.h>
+#include <limits.h>
+
 typedef struct
 {
     float x;
@@ -30,6 +33,9 @@ typedef struct
 typedef struct
 {
     fc_v2f position;
+
+	int64_t user_i64;
+	void*   user_data;
 } fc_node;
 
 typedef struct
@@ -111,6 +117,8 @@ void fc_begin_dynamic_layout(fc_dynamic_layout_state* state);
 void fc_compute_dynamic_step(fc_dynamic_layout_state* state, fc_graph graph, fc_layout_info layout_info);
 
 void fc_layout_graph(fc_graph graph, fc_layout_info layout_info);
+
+#endif // FC_GRAPH_LAYOUT
 
 #ifdef FC_GRAPH_LAYOUT_IMPLEMENTATION
 
@@ -199,7 +207,7 @@ void fc_begin_dynamic_layout(fc_dynamic_layout_state* state, fc_layout_info layo
 
 void fc_compute_dynamic_step(fc_dynamic_layout_state* state, fc_graph graph, fc_layout_info layout_info)
 {
-    float optimal_distance      = (layout_info.optimal_distance * layout_info.optimal_distance * layout_info.optimal_distance * layout_info.optimal_distance) / layout_info.repulsive_force_scale;
+    float optimal_distance      = (layout_info.optimal_distance * layout_info.optimal_distance * layout_info.optimal_distance * layout_info.optimal_distance);
     float repulsive_force_scale = layout_info.repulsive_force_scale;
     float last_energy           = state->energy;
 
@@ -275,8 +283,6 @@ void fc_layout_graph(fc_graph graph, fc_layout_info layout_info)
 }
 
 #endif // FC_GRAPH_LAYOUT_IMPLEMENTATION
-
-#endif // FC_GRAPH_LAYOUT
 
 /*
     Copyright (c) 2023 Filippo Crocchini
