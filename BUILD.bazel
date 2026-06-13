@@ -1,0 +1,10 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+cc_library(
+    name = "fc_utils",
+    hdrs = [
+        "fc_uri_parse.h",
+        "fc_graph_layout.h",
+    ],
+    visibility = ["//visibility:public"],
+)
