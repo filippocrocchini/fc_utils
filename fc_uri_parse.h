@@ -53,11 +53,14 @@ typedef struct
     char buf[FC_URI_MAX + 8]; // Eight '\0' to null-terminate all possible fields. Some characters are ignored so, these are probably too many.
 } fc_uri;
 
-void fc_uri_parse(const char* src, fc_uri* uri);
+void   fc_uri_parse(const char* src, fc_uri* uri);
+size_t fc_uri_to_string(fc_uri* uri, char* buffer, size_t buffer_size);
 
 #ifdef FC_URI_PARSE_IMPLEMENTATION
 
-typedef struct 
+#include <stdio.h>
+
+typedef struct
 {
     char* data;
     int  count;
@@ -85,7 +88,7 @@ static bool fc_urip_accept_str(fc_urip_lexer_state* state, const char* str)
 {
     char* c = state->cursor;
     while (c != state->in_buffer_end && *str && *c++ == *str++);
-    
+
     if (*str == '\0')
     {
         state->cursor = c;
@@ -119,7 +122,7 @@ static fc_urip_str fc_urip_read_until(fc_urip_lexer_state* state, const char* st
     }
 
     result.count = state->cursor - result.data;
-    
+
     return result;
 }
 
@@ -200,9 +203,9 @@ void fc_uri_parse(const char* src, fc_uri* uri)
             // user:pwd@[host]:port/
 
             fc_urip_str host_ot_user = fc_urip_read_until(&authority_parser, ":/");
-            
+
             fc_urip_accept_char(&authority_parser, ':');
-            
+
             fc_urip_str access_info_or_port = fc_urip_read_until(&authority_parser, "@/");
 
             if (fc_urip_accept_char(&authority_parser, '@'))
@@ -265,12 +268,133 @@ void fc_uri_parse(const char* src, fc_uri* uri)
     uri->fragment = fc_urip_copy_string(fragment.data,  fragment.count,  uri->buf, &offset);
 }
 
+size_t fc_uri_to_string(fc_uri* uri, char* buffer, size_t buffer_size)
+{
+    if (!uri) return 0;
+
+    size_t needed = 0;
+    if (uri->scheme && uri->scheme[0] != '\0')
+    {
+        needed += strlen(uri->scheme) + 3; // "scheme://"
+    }
+
+    bool has_authority = (uri->user && uri->user[0] != '\0') || (uri->host && uri->host[0] != '\0');
+
+    if (has_authority)
+    {
+        if (uri->user && uri->user[0] != '\0')
+        {
+            needed += strlen(uri->user);
+            if (uri->access_info && uri->access_info[0] != '\0')
+            {
+                needed += 1 + strlen(uri->access_info); // ":access_info"
+            }
+            needed += 1; // "@"
+        }
+
+        if (uri->host && uri->host[0] != '\0')
+        {
+            if (uri->ipv6_host)
+            {
+                needed += 1 + strlen(uri->host) + 1; // "[host]"
+            }
+            else
+            {
+                needed += strlen(uri->host);
+            }
+        }
+
+        if (uri->port && uri->port[0] != '\0')
+        {
+            needed += 1 + strlen(uri->port); // ":port"
+        }
+    }
+
+    if (uri->path && uri->path[0] != '\0')
+    {
+        needed += strlen(uri->path);
+    }
+
+    if (uri->query && uri->query[0] != '\0')
+    {
+        needed += 1 + strlen(uri->query); // "?query"
+    }
+
+    if (uri->fragment && uri->fragment[0] != '\0')
+    {
+        needed += 1 + strlen(uri->fragment); // "#fragment"
+    }
+
+    needed += 1; // Always account for the '\0' terminator
+
+    if (!buffer || buffer_size < needed)
+    {
+        return needed;
+    }
+
+    char* ptr = buffer;
+
+    if (uri->scheme && uri->scheme[0] != '\0')
+    {
+        ptr += sprintf(ptr, "%s://", uri->scheme);
+    }
+
+    if (has_authority)
+    {
+        if (uri->user && uri->user[0] != '\0')
+        {
+            ptr += sprintf(ptr, "%s", uri->user);
+            if (uri->access_info && uri->access_info[0] != '\0')
+            {
+                ptr += sprintf(ptr, ":%s", uri->access_info);
+            }
+            ptr += sprintf(ptr, "@");
+        }
+
+        if (uri->host && uri->host[0] != '\0')
+        {
+            if (uri->ipv6_host)
+            {
+                ptr += sprintf(ptr, "[%s]", uri->host);
+            }
+            else
+            {
+                ptr += sprintf(ptr, "%s", uri->host);
+            }
+        }
+
+        if (uri->port && uri->port[0] != '\0')
+        {
+            ptr += sprintf(ptr, ":%s", uri->port);
+        }
+    }
+
+    if (uri->path && uri->path[0] != '\0')
+    {
+        ptr += sprintf(ptr, "%s", uri->path);
+    }
+
+    if (uri->query && uri->query[0] != '\0')
+    {
+        ptr += sprintf(ptr, "?%s", uri->query);
+    }
+
+    if (uri->fragment && uri->fragment[0] != '\0')
+    {
+        ptr += sprintf(ptr, "#%s", uri->fragment);
+    }
+
+    *ptr = '\0';
+
+    return (size_t)(ptr - buffer) + 1;
+}
+
 #endif // FC_URI_PARSE_IMPLEMENTATION
 
 #endif
 
 /*
-    Copyright (c) 2023 Filippo Crocchini
+    Copyright (c) 2026 Filippo Crocchini
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to deal
